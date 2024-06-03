@@ -199,3 +199,19 @@
 (defun hash-keys (hash)
   "Grab all the hash keys of the passed hash into a list."
   (loop for x being the hash-keys of hash collect x))
+
+
+
+(defun remove-hash-keys (keys hash-table)
+  (let ((hash-copy
+	  (hash-copy hash-table)))
+    (mapc (lambda (key)
+	    (remhash key hash-copy))
+	  keys)
+    hash-copy))
+
+(defun delete-hash-keys (hash-table keys)
+    (mapc (lambda (key)
+	  (remhash key hash-table))
+	keys)
+  hash-table)
