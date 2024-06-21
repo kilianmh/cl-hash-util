@@ -62,6 +62,12 @@
   (:nicknames :hu))
 (in-package :cl-hash-util)
 
+(defun hash-table-test-p (test)
+  (member test (quote (eq eql equal equalp))))
+
+(deftype test ()
+  (quote (and symbol (satisfies hash-table-test-p))))
+
 (defvar *error-on-nil* nil
   "If hget encounters a nil, error out.")
 
@@ -86,6 +92,40 @@
 (defmacro hash (&rest pairs)
   "Extends hash-create syntax to make it nicer."
   `(hash-create (list ,@(loop for pair in pairs collect (list 'list (car pair) (cadr pair))))))
+
+(defun ensure-new-entry (hash-table key value)
+  "Like (setf (gethash key hash-table) value), but returns an error if the
+key exists already in the table."
+  (if (gethash key hash-table)
+      (error "The key ~A exists already with value ~A." key value)
+      (setf (gethash key hash-table) value)))
+
+(defun plist-hash-table (plist &rest initargs
+			 &key test size rehash-size rehash-threshold
+			   #+sbcl weakness #+sbcl hash-function #+sbcl synchronized)
+  "Returns a hash table containing the keys and values of the property list
+PLIST. Hash table is initialized using the HASH-TABLE-INITARGS.
+
+If a key occurs more than one time then an error is signalled.
+Adapted from Alexandria."
+  (declare (ignore test size rehash-size rehash-threshold
+		   #+sbcl weakness #+sbcl hash-function #+sbcl synchronized))
+  (let ((length (length plist))
+	 (hash-table (apply #'make-hash-table initargs)))
+    (when (oddp length)
+      (error "the plist has contain an even number of elements"))
+    (loop for (key value) on plist by #'cddr
+	  do (ensure-new-entry hash-table key value))
+    hash-table))
+
+(defun ht (&rest pairs)
+  (let* ((length (length pairs))
+	 (hash-table-test (if (oddp length)
+			      (pop pairs)
+			      'equal)))
+    (declare (integer length)
+	     (type test hash-table-test))
+    (plist-hash-table )))
 
 (defun %hget-access (obj key)
   (if (hash-table-p obj)
