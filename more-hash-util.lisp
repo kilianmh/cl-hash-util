@@ -86,8 +86,12 @@ If you want to supply a default value, you have to supply a list -
      (unless (and (functionp (car mode)) (functionp (second mode)))
        (error "Invalid hash mode: needs two functions.")))))
 
-(defmacro collecting-hash-table ((&key (test '(function eql) test-set-p)
-                                    existing (mode :append)) &body body)
+(defmacro collecting-hash-table ((&rest arguments
+				  &key mode existing size
+				    test rehash-size rehash-threshold
+				    #+sbcl hash-function #+sbcl weakness
+				    #+sbcl synchronized)
+				 &body body)
   "A collection macro that builds and outputs a hash table. To add to the hash
 table, call the collect function with a key and a value from within the scope
 of the collecting-hash-table macro. The value will be inserted or combined with
@@ -119,14 +123,20 @@ This code collects words into bins based on their length:
   :mode - Set the default mode for the collect function. Modes are :replace :keep
   :tally :sum :append :push :concatenate or a function that will be applied in a
   reduce-like fashion to the existing and new values of a key."
-  (and test-set-p existing
-       (error "Can't set test when reusing an existing hash table"))
+  (and existing (or size test rehash-size rehash-threshold
+		    #+sbcl hash-function #+sbcl weakness
+		    #+sbcl synchronized)
+       (error "Can't set hash-table parameters when reusing an existing hash table"))
+  (unless mode
+    (setf (getf arguments 'mode) :append))
+  (unless test
+    (setf (getf arguments 'test) (function eql)))
   (let ((fill (gensym))
         (init (gensym))
         (stor (gensym))
         (xist (gensym)))
     `(let* ((,xist ,existing)
-            (,stor (if ,xist ,xist (make-hash-table :test ,test))))
+            (,stor (if ,xist ,xist (apply (function make-hash-table) arguments))))
        (destructuring-bind (,fill ,init) (%hash-collecting-modes ,mode)
          (labels
              ((collect (key value &key mode)
@@ -155,7 +165,11 @@ This code collects words into bins based on their length:
   (loop for (k v) on plist by #'cddr
         collect (cons k v)))
 
-(defun alist->hash (al &key (mode :replace) existing)
+(defun alist->hash (al &rest arguments
+		    &key (mode :replace) existing size
+		      test rehash-size rehash-threshold
+		      #+sbcl hash-function #+sbcl weakness
+		      #+sbcl synchronized)
   "Converts an alist to a hash table.
 
 The :existing keyword can be used to supply a hash table to which the contents
@@ -168,9 +182,21 @@ set with the :mode keyword. Available modes are :replace :keep :tally :sum
 
 If a function is supplied instead of a recognized mode, then values will be
 accumulated to each key as by a reduce of the function."
-  (collecting-hash-table (:mode mode :existing existing)
-    (dolist (x (reverse al))
-      (collect (car x) (cdr x)))))
+  (and existing (or size test rehash-size rehash-threshold
+		    #+sbcl hash-function #+sbcl weakness
+		    #+sbcl synchronized)
+       (error "Can't set hash-table parameters when reusing an existing hash table"))
+  (remprop arguments (quote mode))
+  (remprop arguments (quote existing))
+  (unless existing
+    (let ((ht
+	    (funcall (function make-hash-table)  arguments)))
+      (setf existing ht))
+    
+    (collecting-hash-table (:mode mode
+			    :existing existing)
+      (dolist (x (reverse al))
+	(collect (car x) (cdr x))))))
 
 (defun plist->hash (plist &key (mode :replace) existing)
   "Converts a plist to a hash table.

@@ -65,7 +65,11 @@
 (defvar *error-on-nil* nil
   "If hget encounters a nil, error out.")
 
-(defun hash-create (pairs &key (test #'equal))
+(defun hash-create (pairs &rest arguments
+		    &key test size rehash-size
+		      rehash-threshold
+		      #+sbcl hash-function #+sbcl weakness
+		      #+sbcl synchronized)
   "Create a hash table with limited syntax:
 
      (hash `((\"name\" \"andrew\") (\"city\" \"santa cruz\")))
@@ -78,7 +82,11 @@
        hash)
 
    yuck city."
-  (let ((hash (make-hash-table :test test)))
+  (declare (ignore size rehash-size rehash-threshold)
+	   #+sbcl (ignore hash-function weakness synchronized))
+  (unless test
+    (setf (getf arguments 'test) #'equal))
+  (let ((hash (apply (function make-hash-table) arguments)))
     (dolist (pair pairs)
       (setf (gethash (car pair) hash) (cadr pair)))
     hash))
